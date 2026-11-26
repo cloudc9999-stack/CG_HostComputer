@@ -190,6 +190,44 @@ Assert(
     zoomChart.ConfiguredTimeWindowSeconds == 40,
     "一键恢复配置中的坐标范围");
 
+using var rollingChart = new LineChartControl();
+rollingChart.ConfigureAxes(0, 100, 30);
+for (var index = 0; index <= 40; index++)
+{
+    rollingChart.AddPoint(index, index);
+}
+var visibleWindowMethod = typeof(LineChartControl).GetMethod(
+    "GetVisibleWindow",
+    BindingFlags.NonPublic | BindingFlags.Instance);
+var toScreenXMethod = typeof(LineChartControl).GetMethod(
+    "ToScreenX",
+    BindingFlags.NonPublic | BindingFlags.Static);
+Assert(
+    visibleWindowMethod is not null && toScreenXMethod is not null,
+    "压力图右移时间轴接口");
+var rollingWindow = visibleWindowMethod!.Invoke(rollingChart, null)
+    ?? throw new InvalidOperationException("压力图可见范围为空。");
+var visibleWindowType = rollingWindow.GetType();
+var visibleEndTime = (double)visibleWindowType
+    .GetProperty("EndTime", BindingFlags.Public | BindingFlags.Instance)!
+    .GetValue(rollingWindow)!;
+var visiblePoints = ((System.Collections.IEnumerable)visibleWindowType
+        .GetProperty("Points", BindingFlags.Public | BindingFlags.Instance)!
+        .GetValue(rollingWindow)!)
+    .Cast<object>()
+    .ToArray();
+var latestAge = (double)visiblePoints[^1].GetType()
+    .GetProperty("Seconds", BindingFlags.Public | BindingFlags.Instance)!
+    .GetValue(visiblePoints[^1])!;
+var latestScreenX = (float)toScreenXMethod!.Invoke(
+    null,
+    [new RectangleF(10, 10, 200, 100), latestAge, 0d, 30d])!;
+Assert(
+    visibleEndTime == 30 &&
+    Math.Abs(latestAge) < 0.001 &&
+    Math.Abs(latestScreenX - 210) < 0.01,
+    "最新压力数据固定在右侧 0s");
+
 using var selectionZoomChart = new LineChartControl();
 selectionZoomChart.ConfigureAxes(0, 1_000, 30);
 for (var index = 0; index <= 100; index++)
@@ -1341,13 +1379,14 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             Assert(
                 connectionPanel!.Dock == DockStyle.Left &&
                 connectionPanel.CurrentOptions.CanBitrate == 1_000_000,
-                "板卡连接与通信配置永久显示在主界面左侧");
-            connectionPanel.SetDeviceSn("设备 SN：0x78C27591");
+                "USB-CAN 盒通信配置永久显示在主界面左侧");
             Assert(
                 EnumerateControls(connectionPanel)
                     .OfType<Label>()
-                    .Any(label => label.Text == "设备 SN：0x78C27591"),
-                "左上连接面板实时显示设备 SN");
+                    .All(label =>
+                        !label.Text.Contains("设备 SN", StringComparison.Ordinal) &&
+                        !label.Text.Contains("开发板", StringComparison.Ordinal)),
+                "主界面只显示 USB-CAN 盒通信状态");
 
             setReceiveModeMethod!.Invoke(
                 mainForm,

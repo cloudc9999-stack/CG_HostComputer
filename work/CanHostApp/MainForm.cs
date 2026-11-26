@@ -335,7 +335,6 @@ public sealed class MainForm : Form
         _supplyControlModule.SendAction = _sendModule.SendAction;
         _sendModule.StatusChanged += SetStatus;
         _supplyControlModule.StatusChanged += SetStatus;
-        _supplyControlModule.DeviceSnChanged += _connectionPanel.SetDeviceSn;
         _supplyControlModule.PressurePlotConfigurationRequested +=
             () => _pressurePlotWindowManager.ShowConfiguration(this);
         _workspace.ModuleVisibilityChanged += WorkspaceOnModuleVisibilityChanged;
@@ -564,10 +563,6 @@ public sealed class MainForm : Form
         _sendModule.SetConnected(connected);
         _supplyControlModule.SetCanAvailable(connected);
         _connectionPanel.SetConnectionState(connected, _connectedSummary);
-        if (!connected)
-        {
-            _connectionPanel.SetDeviceSn("设备 SN：--");
-        }
         UpdateConnectionDisplay();
     }
 
@@ -575,8 +570,8 @@ public sealed class MainForm : Form
     {
         var connected = _adapter?.IsConnected == true;
         _connectionLabel.Text = connected
-            ? $"●  已连接  ·  {_connectedSummary}"
-            : "●  未连接";
+            ? $"●  USB-CAN 盒已连接  ·  {_connectedSummary}"
+            : "●  USB-CAN 盒未连接";
         _connectionLabel.ForeColor = connected ? SuccessColor : DangerColor;
     }
 
@@ -597,7 +592,6 @@ public sealed class MainForm : Form
             _receiveModule.AddFrame(e.Frame);
             _tickerModule.ShowFrame(e.Frame);
             _supplyControlModule.ProcessFrame(e.Frame);
-            _connectionPanel.SetDeviceSn(_supplyControlModule.ConnectedSnText);
             if (SensorReportParser.TryParse(e.Frame, out var report))
             {
                 AppendPressurePlotValues(report);

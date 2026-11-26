@@ -14,7 +14,6 @@ public sealed class ConnectionDockPanel : UserControl
     private readonly Button _disconnect = new();
     private readonly Button _refresh = new();
     private readonly Label _state = new();
-    private readonly Label _sn = new();
 
     public ConnectionDockPanel()
     {
@@ -32,7 +31,9 @@ public sealed class ConnectionDockPanel : UserControl
 
     public void SetConnectionState(bool connected, string summary)
     {
-        _state.Text = connected ? "●  已连接  " + summary : "●  未连接";
+        _state.Text = connected
+            ? "●  USB-CAN 盒：已连接  " + summary
+            : "●  USB-CAN 盒：未连接";
         _state.ForeColor = connected ? AppTheme.Success : AppTheme.Danger;
         _connect.Enabled = !connected;
         _disconnect.Enabled = connected;
@@ -43,19 +44,11 @@ public sealed class ConnectionDockPanel : UserControl
         _refresh.Enabled = !connected;
     }
 
-    public void SetDeviceSn(string? value)
-    {
-        _sn.Text = string.IsNullOrWhiteSpace(value) ? "设备 SN：--" : value;
-        _sn.ForeColor = _sn.Text.EndsWith("--", StringComparison.Ordinal)
-            ? AppTheme.Muted
-            : AppTheme.Success;
-    }
-
     private void BuildInterface()
     {
         var title = new Label
         {
-            Text = "通信配置 · 板卡连接",
+            Text = "通信配置 · USB 转 CAN 盒",
             Dock = DockStyle.Top,
             Height = 28,
             Font = new Font("Microsoft YaHei UI", 11F, FontStyle.Bold),
@@ -104,17 +97,11 @@ public sealed class ConnectionDockPanel : UserControl
         _disconnect.Enabled = false;
         _disconnect.Click += (_, _) => DisconnectRequested?.Invoke();
 
-        _state.Text = "●  未连接";
+        _state.Text = "●  USB-CAN 盒：未连接";
         _state.ForeColor = AppTheme.Danger;
         _state.Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
         _state.AutoEllipsis = true;
         _state.Height = 34;
-
-        _sn.Text = "设备 SN：--";
-        _sn.ForeColor = AppTheme.Muted;
-        _sn.Font = new Font("Cascadia Mono", 9F, FontStyle.Bold);
-        _sn.AutoEllipsis = true;
-        _sn.Height = 25;
 
         var stack = new FlowLayoutPanel
         {
@@ -152,7 +139,6 @@ public sealed class ConnectionDockPanel : UserControl
         buttons.Controls.AddRange([_connect, _disconnect]);
         AddRow(buttons);
         AddRow(_state);
-        AddRow(_sn);
 
         Controls.Add(stack);
         Controls.Add(title);

@@ -208,8 +208,8 @@ public sealed class LineChartControl : Control
         DrawAxisLabels(
             graphics,
             plot,
-            windowSpan,
-            0,
+            window.StartTime,
+            window.EndTime,
             YMinimum,
             YMaximum,
             xDivisions,
@@ -546,7 +546,7 @@ public sealed class LineChartControl : Control
 
         for (var index = 0; index <= xDivisions; index++)
         {
-            var value = xMin + (xMax - xMin) * index / xDivisions;
+            var value = xMax - (xMax - xMin) * index / xDivisions;
             var x = plot.Left + plot.Width * index / xDivisions;
             var label = $"{value:0}s";
             var size = TextRenderer.MeasureText(label, _axisFont);
@@ -574,7 +574,8 @@ public sealed class LineChartControl : Control
 
     private static float ToScreenX(RectangleF plot, double value, double min, double max)
     {
-        return plot.Left + (float)((value - min) / Math.Max(double.Epsilon, max - min)) * plot.Width;
+        return plot.Right -
+               (float)((value - min) / Math.Max(double.Epsilon, max - min)) * plot.Width;
     }
 
     private static float ToScreenY(RectangleF plot, double value, double min, double max)
@@ -588,7 +589,11 @@ public sealed class LineChartControl : Control
         {
             var customStartTime = _customViewStartTime.Value;
             var customEndTime = _customViewEndTime.Value;
+            var currentLatestTime = _points[^1].Seconds;
             var customPoints = _points
+                .Select(point => new PlotPoint(
+                    currentLatestTime - point.Seconds,
+                    point.Value))
                 .Where(point =>
                     point.Seconds >= customStartTime &&
                     point.Seconds <= customEndTime)
@@ -601,13 +606,17 @@ public sealed class LineChartControl : Control
             return new VisibleWindow(0, TimeWindowSeconds, []);
         }
 
-        var lastTime = _points[^1].Seconds;
-        var endTime = Math.Max(TimeWindowSeconds, lastTime);
-        var startTime = Math.Max(0, endTime - TimeWindowSeconds);
+        var latestTime = _points[^1].Seconds;
+        var earliestVisibleTime = Math.Max(0, latestTime - TimeWindowSeconds);
         var points = _points
-            .Where(point => point.Seconds >= startTime && point.Seconds <= endTime)
+            .Where(point =>
+                point.Seconds >= earliestVisibleTime &&
+                point.Seconds <= latestTime)
+            .Select(point => new PlotPoint(
+                latestTime - point.Seconds,
+                point.Value))
             .ToArray();
-        return new VisibleWindow(startTime, endTime, points);
+        return new VisibleWindow(0, TimeWindowSeconds, points);
     }
 
     protected override void Dispose(bool disposing)
