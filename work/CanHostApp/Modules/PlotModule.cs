@@ -17,6 +17,7 @@ public sealed class PlotModule : UserControl
     private readonly Button _resetZoomButton = new();
     private readonly ToolTip _toolTip = new();
     private long _sampleIndex;
+    private DateTime? _firstSampleAt;
 
     public PlotModule(string title)
     {
@@ -34,12 +35,23 @@ public sealed class PlotModule : UserControl
 
     public void AppendValue(double value)
     {
-        _chart.AddPoint(_sampleIndex++, value);
+        AppendValue(value, DateTime.Now);
+    }
+
+    public void AppendValue(double value, DateTime timestamp)
+    {
+        _firstSampleAt ??= timestamp;
+        var elapsedSeconds = Math.Max(
+            0,
+            (timestamp - _firstSampleAt.Value).TotalSeconds);
+        _chart.AddPoint(elapsedSeconds, value);
+        _sampleIndex++;
     }
 
     public void ClearPlot()
     {
         _sampleIndex = 0;
+        _firstSampleAt = null;
         _chart.ClearPoints();
         PlotCleared?.Invoke(this, EventArgs.Empty);
     }

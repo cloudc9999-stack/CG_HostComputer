@@ -116,6 +116,7 @@ public sealed class DockableModuleHost : UserControl
     public string ModuleId { get; }
     public string ModuleTitle { get; }
     public Rectangle PreferredBounds { get; set; }
+    public bool PreventDocking { get; set; }
 
     public DockableWorkspace? Workspace => _workspace ?? Parent as DockableWorkspace;
 
@@ -413,7 +414,8 @@ public sealed class DockableModuleHost : UserControl
         {
             if (IsFloating)
             {
-                if (workspace.IsScreenPointInside(Cursor.Position))
+                if (!PreventDocking &&
+                    workspace.IsScreenPointInside(Cursor.Position))
                 {
                     workspace.DockFloatingModule(this, Cursor.Position);
                 }

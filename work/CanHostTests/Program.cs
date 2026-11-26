@@ -1211,9 +1211,7 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             Assert(
                 blankDisplayMenu?.DropDownItems
                     .OfType<ToolStripMenuItem>()
-                    .Where(item =>
-                        pressurePlotTitles.Contains(item.Text) ||
-                        item.Text is "储供控制" or "发送帧")
+                    .Where(item => item.Text is "储供控制" or "发送帧")
                     .All(item => !item.Checked) == true,
                 "默认模块应全部隐藏");
             RenderForm(blankForm, "ui-blank-preview.png");
@@ -1227,6 +1225,24 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
                 plotModules.Length == 5 &&
                 plotModules.Select(module => module.Title).SequenceEqual(pressurePlotTitles),
                 "五个气压传感器绘图模块");
+            var pressureWindowManager = typeof(MainForm)
+                .GetField(
+                    "_pressurePlotWindowManager",
+                    BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(mainForm);
+            Assert(pressureWindowManager is not null, "压力波形独立窗口管理器");
+            var pressureWindowMethod = pressureWindowManager!.GetType().GetMethod(
+                "SetWindowVisible",
+                BindingFlags.NonPublic | BindingFlags.Instance);
+            Assert(pressureWindowMethod is not null, "压力波形窗口打开接口");
+            pressureWindowMethod!.Invoke(pressureWindowManager, [0, true]);
+            var pressureWindows = (Form?[]?)pressureWindowManager.GetType()
+                .GetField("_windows", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(pressureWindowManager);
+            Assert(
+                pressureWindows?[0] is { Visible: true } &&
+                pressureWindows[0]!.MinimumSize.Width >= 500,
+                "压力波形永久独立窗口");
             Assert(
                 plotModules!
                     .SelectMany(EnumerateControls)
@@ -1278,8 +1294,8 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             var tickerHost = (DockableModuleHost?)typeof(MainForm)
                 .GetField("_tickerHost", BindingFlags.NonPublic | BindingFlags.Instance)
                 ?.GetValue(mainForm);
-            var plotHosts = (DockableModuleHost[]?)typeof(MainForm)
-                .GetField("_plotHosts", BindingFlags.NonPublic | BindingFlags.Instance)
+            var supplyHost = (DockableModuleHost?)typeof(MainForm)
+                .GetField("_supplyControlHost", BindingFlags.NonPublic | BindingFlags.Instance)
                 ?.GetValue(mainForm);
             var sendHost = (DockableModuleHost?)typeof(MainForm)
                 .GetField("_sendHost", BindingFlags.NonPublic | BindingFlags.Instance)
@@ -1300,7 +1316,7 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
                 workspace is not null &&
                 receiveHost is not null &&
                 tickerHost is not null &&
-                plotHosts is { Length: 5 } &&
+                supplyHost?.PreventDocking == true &&
                 sendHost is not null &&
                 receiveModeType is not null &&
                 setReceiveModeMethod is not null &&
@@ -1348,28 +1364,20 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             var sendVisibilityItem = displayMenu?.DropDownItems
                 .OfType<ToolStripMenuItem>()
                 .FirstOrDefault(item => item.Text == "发送帧");
-            var pressurePlotVisibilityItems = displayMenu?.DropDownItems
-                .OfType<ToolStripMenuItem>()
-                .Where(item => pressurePlotTitles.Contains(item.Text))
-                .ToArray();
             var applyVisibilityMethod = typeof(MainForm).GetMethod(
                 "ApplyModuleVisibility",
                 BindingFlags.NonPublic | BindingFlags.Instance);
             Assert(
                 sendVisibilityItem is not null &&
-                pressurePlotVisibilityItems is { Length: 5 } &&
+                displayMenu?.DropDownItems
+                    .OfType<ToolStripMenuItem>()
+                    .Any(item => pressurePlotTitles.Contains(item.Text)) == false &&
                 applyVisibilityMethod is not null,
                 "未找到显示菜单");
             sendVisibilityItem!.Checked = false;
             applyVisibilityMethod!.Invoke(mainForm, [sendVisibilityItem]);
             sendVisibilityItem.Checked = true;
             applyVisibilityMethod.Invoke(mainForm, [sendVisibilityItem]);
-            pressurePlotVisibilityItems![0].Checked = true;
-            applyVisibilityMethod.Invoke(mainForm, [pressurePlotVisibilityItems[0]]);
-            Assert(
-                pressurePlotVisibilityItems[0].Checked &&
-                DisplayStateStore.Load().MainPressurePlotVisible,
-                "勾选主气压绘图后保存显示状态");
 
             var sendModuleHost = sendHost!;
             workspace!.SetModuleVisible(sendModuleHost, true);
@@ -1402,6 +1410,14 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
                     workspace.FloatModule(module, new Point(120, 120)) &&
                     module.IsFloating,
                     $"模块 {module.ModuleTitle} 独立浮动");
+                if (module.PreventDocking)
+                {
+                    workspace.DockFloatingModule(module);
+                    Assert(
+                        module.IsFloating,
+                        $"模块 {module.ModuleTitle} 禁止停靠回主窗口");
+                    continue;
+                }
                 workspace.DockFloatingModule(module);
                 Assert(
                     !module.IsFloating && module.Parent == workspace,
@@ -1483,40 +1499,27 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
                 "设置菜单主题选项");
 
             workspace!.Size = new Size(900, 650);
-            var snapped = workspace.SnapBounds(plotHosts![0], new Rectangle(-5, 3, 350, 240), false);
+            var snapped = workspace.SnapBounds(receiveHost!, new Rectangle(-5, 3, 350, 240), false);
             Assert(snapped.X == 0 && snapped.Y == 0, "模块拖动边缘吸附");
 
             RenderForm(mainForm, "ui-preview.png");
 
-            using var pressurePlotsForm = new MainForm();
-            var pressurePlotsMenu = pressurePlotsForm.MainMenuStrip?.Items
-                .OfType<ToolStripMenuItem>()
-                .FirstOrDefault(item => item.Text == "显示");
-            var pressurePlotItems = pressurePlotsMenu?.DropDownItems
-                .OfType<ToolStripMenuItem>()
-                .Where(item => pressurePlotTitles.Contains(item.Text))
-                .ToArray();
-            var pressurePlotsModules = (PlotModule[]?)typeof(MainForm)
-                .GetField("_plotModules", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.GetValue(pressurePlotsForm);
-            Assert(
-                pressurePlotItems is { Length: 5 } && pressurePlotsModules is { Length: 5 },
-                "五个气压绘图菜单和模块");
-            foreach (var item in pressurePlotItems!)
+            using var pressurePlotsForm = new Form
             {
-                item.Checked = true;
-            }
-            foreach (var plotModule in pressurePlotsModules!)
+                Text = "主气压传感器",
+                Size = new Size(900, 560),
+                BackColor = AppTheme.Background
+            };
+            using var pressurePlotPreview = new PlotModule("主气压传感器")
             {
-                for (var index = 0; index < 30; index++)
-                {
-                    plotModule.AppendValue(1000 + plotModule.Title.Length * 50 + index * 25);
-                }
+                Dock = DockStyle.Fill
+            };
+            for (var index = 0; index < 30; index++)
+            {
+                pressurePlotPreview.Chart.AddPoint(index, 1000 + index * 35);
             }
-            typeof(MainForm).GetMethod(
-                "ApplyModuleVisibility",
-                BindingFlags.NonPublic | BindingFlags.Instance)!
-                .Invoke(pressurePlotsForm, [null]);
+            pressurePlotsForm.Controls.Add(pressurePlotPreview);
+            ThemeApplicator.Apply(pressurePlotsForm);
             RenderForm(pressurePlotsForm, "pressure-plots-preview.png");
 
             using var maximizeModule = new SupplyControlModule { Dock = DockStyle.Fill };
@@ -1649,7 +1652,11 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
 
             AppTheme.SetTheme(AppThemeMode.Light);
             using var lightForm = new MainForm();
-            var lightChart = FindControl<LineChartControl>(lightForm);
+            var lightChart = ((PlotModule[]?)typeof(MainForm)
+                    .GetField("_plotModules", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.GetValue(lightForm))
+                ?[0]
+                .Chart;
             Assert(
                 AppTheme.IsLight &&
                 lightForm.BackColor.ToArgb() == Color.FromArgb(242, 245, 249).ToArgb(),

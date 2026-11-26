@@ -25,7 +25,7 @@ public sealed class DockableWorkspace : Panel
     private string LayoutPath => LayoutPathOverride ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CanHost",
-        "dock-layout-v5.2.json");
+        "dock-layout-v5.3.json");
 
     public DockableWorkspace()
     {
@@ -141,6 +141,10 @@ public sealed class DockableWorkspace : Panel
 
     public void DockFloatingModule(DockableModuleHost host, Point? screenPoint = null)
     {
+        if (host.PreventDocking)
+        {
+            return;
+        }
         if (!_floatingWindows.Remove(host.ModuleId, out var floating))
         {
             return;
@@ -175,7 +179,10 @@ public sealed class DockableWorkspace : Panel
     {
         foreach (var host in _hosts.Where(IsModuleFloating).ToArray())
         {
-            DockFloatingModule(host);
+            if (!host.PreventDocking)
+            {
+                DockFloatingModule(host);
+            }
         }
     }
 
@@ -269,6 +276,10 @@ public sealed class DockableWorkspace : Panel
 
     public void RestoreModule(DockableModuleHost host)
     {
+        if (host.PreventDocking)
+        {
+            return;
+        }
         if (IsModuleFloating(host))
         {
             DockFloatingModule(host);
@@ -290,6 +301,10 @@ public sealed class DockableWorkspace : Panel
 
     public void DockModule(DockableModuleHost host, DockSide side)
     {
+        if (host.PreventDocking)
+        {
+            return;
+        }
         if (IsModuleFloating(host))
         {
             DockFloatingModule(host);
@@ -568,7 +583,15 @@ public sealed class DockableWorkspace : Panel
         {
             var floating = IsModuleFloating(host);
             floatItem.Enabled = !floating;
-            dockFloatingItem.Enabled = floating;
+            dockFloatingItem.Enabled = floating && !host.PreventDocking;
+            foreach (ToolStripItem item in menu.Items)
+            {
+                if (item is ToolStripMenuItem dockItem &&
+                    dockItem.Text?.StartsWith("停靠", StringComparison.Ordinal) == true)
+                {
+                    dockItem.Enabled = !host.PreventDocking;
+                }
+            }
         };
         menu.Items.Add(new ToolStripSeparator());
         var restore = new ToolStripMenuItem("恢复拖动位置")

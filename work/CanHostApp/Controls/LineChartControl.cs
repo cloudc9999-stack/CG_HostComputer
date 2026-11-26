@@ -199,13 +199,16 @@ public sealed class LineChartControl : Control
         var plot = new RectangleF(78, 28, Math.Max(40, Width - 102), Math.Max(40, Height - 76));
         _plotBounds = plot;
         var yDivisions = GetAxisDivisionCount(plot.Height, 36, 4, 12);
-        var xDivisions = GetAxisDivisionCount(plot.Width, 64, 4, 12);
-        DrawGrid(graphics, plot, yDivisions, xDivisions);
         var window = GetVisibleWindow();
+        var windowSpan = Math.Max(1, window.EndTime - window.StartTime);
+        var xDivisions = GetAxisDivisionCount(plot.Width, 64, 4, 12);
+        var maximumLabeledDivisions = Math.Max(1, (int)Math.Floor(windowSpan / 5.0));
+        xDivisions = Math.Min(xDivisions, maximumLabeledDivisions);
+        DrawGrid(graphics, plot, yDivisions, xDivisions);
         DrawAxisLabels(
             graphics,
             plot,
-            Math.Max(1, window.EndTime - window.StartTime),
+            windowSpan,
             0,
             YMinimum,
             YMaximum,

@@ -27,6 +27,10 @@ work/*preview*.png
 work/*test*.png
 work/*test*.json
 work/*test*.txt
+/*preview*.png
+/*test*.png
+/*test*.json
+/*test*.txt
 
 # OS noise
 Thumbs.db

@@ -19,6 +19,7 @@ public sealed class SupplyControlModule : UserControl
     private readonly Panel _connectionHost = new();
     private readonly Panel _connectionHeader = new();
     private readonly Button _connectionToggleButton = new();
+    private readonly Button _controlConfigButton = new();
     private readonly Label _schematicTitle = new();
     private readonly NumericUpDown[] _dutyInputs = new NumericUpDown[4];
     private readonly Button[] _dutyButtons = new Button[4];
@@ -95,6 +96,7 @@ public sealed class SupplyControlModule : UserControl
     }
 
     public event Action<string?>? StatusChanged;
+    public event Action? PressurePlotConfigurationRequested;
     public bool IsSelfLockOpen => _selfLockOpen;
     public bool IsGasFlowEnabled => _schematic.GasFlowEnabled;
     public bool IsSolenoidControlPending =>
@@ -1101,11 +1103,25 @@ public sealed class SupplyControlModule : UserControl
         _connectionToggleButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _connectionToggleButton.Bounds = new Rectangle(Width - 96, 5, 86, 25);
         _connectionToggleButton.Click += (_, _) => ToggleConnectionSection();
-        _connectionHeader.Controls.Add(_connectionToggleButton);
+        _controlConfigButton.Text = "配置";
+        _controlConfigButton.FlatStyle = FlatStyle.Flat;
+        _controlConfigButton.FlatAppearance.BorderColor = AppTheme.Border;
+        _controlConfigButton.BackColor = AppTheme.SecondaryButton;
+        _controlConfigButton.ForeColor = AppTheme.Text;
+        _controlConfigButton.Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
+        _controlConfigButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+        _controlConfigButton.Bounds = new Rectangle(Width - 174, 5, 70, 25);
+        _controlConfigButton.Click +=
+            (_, _) => PressurePlotConfigurationRequested?.Invoke();
+        _connectionHeader.Controls.AddRange([_controlConfigButton, _connectionToggleButton]);
         _connectionHost.Controls.Add(_connection);
         _connectionHost.Controls.Add(_connectionHeader);
         _connection.Visible = false;
-        Resize += (_, _) => _connectionToggleButton.Left = Width - 96;
+        Resize += (_, _) =>
+        {
+            _controlConfigButton.Left = Width - 174;
+            _connectionToggleButton.Left = Width - 96;
+        };
 
         BuildDutyEditorBar();
 

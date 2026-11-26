@@ -1418,9 +1418,9 @@ public sealed class SupplySchematicControl : UserControl
         {
             return new Rectangle(
                 1410,
-                BranchCenters[index] - 52,
-                132,
-                104);
+                BranchCenters[index] - 48,
+                126,
+                96);
         }
 
         private static Rectangle GetPtcManualRect(int index)
@@ -1492,15 +1492,15 @@ public sealed class SupplySchematicControl : UserControl
             DrawText(
                 graphics,
                 $"PTC {index + 1} · 缓冲腔 {index + 1}",
-                new Rectangle(body.X + 4, body.Y + 34, body.Width - 8, 24),
-                _fontValue,
+                new Rectangle(body.X + 3, body.Y + 28, body.Width - 6, 21),
+                _fontCompact,
                 AppTheme.Text,
                 true);
             DrawText(
                 graphics,
                 _temperatures[index],
-                new Rectangle(body.X + 6, body.Bottom - 30, body.Width - 12, 24),
-                _fontBold,
+                new Rectangle(body.X + 4, body.Bottom - 27, body.Width - 8, 22),
+                _fontValue,
                 AppTheme.Danger,
                 true);
             DrawText(
@@ -1550,24 +1550,56 @@ public sealed class SupplySchematicControl : UserControl
         private void DrawRestrictor(Graphics graphics, int index, Rectangle body)
         {
             var centerX = body.Left + body.Width / 2;
-            Point[] bowtie =
+            var centerY = body.Top + body.Height / 2;
+            using var pipeOutline = new Pen(AppTheme.Border, 9f);
+            using var pipeInner = new Pen(AppTheme.Card, 4f);
+            graphics.DrawLine(pipeOutline, body.Left - 8, centerY, body.Right + 8, centerY);
+            graphics.DrawLine(pipeInner, body.Left - 8, centerY, body.Right + 8, centerY);
+
+            Point[] valveBody =
             [
-                new(body.Left, body.Top),
-                new(body.Right, body.Top),
-                new(centerX, body.Top + body.Height / 2),
-                new(body.Right, body.Bottom),
-                new(body.Left, body.Bottom),
-                new(centerX, body.Top + body.Height / 2)
+                new(centerX - 42, body.Top),
+                new(centerX + 42, body.Top),
+                new(centerX + 13, centerY - 12),
+                new(centerX + 13, centerY - 5),
+                new(centerX + 28, centerY - 5),
+                new(centerX + 28, centerY + 5),
+                new(centerX + 13, centerY + 5),
+                new(centerX + 13, centerY + 12),
+                new(centerX + 42, body.Bottom),
+                new(centerX - 42, body.Bottom),
+                new(centerX - 13, centerY + 12),
+                new(centerX - 13, centerY + 5),
+                new(centerX - 28, centerY + 5),
+                new(centerX - 28, centerY - 5),
+                new(centerX - 13, centerY - 5),
+                new(centerX - 13, centerY - 12)
             ];
-            using var fill = new SolidBrush(AppTheme.Accent);
+            using var fill = new SolidBrush(PipeColor);
             using var border = new Pen(AppTheme.Border, 2);
-            graphics.FillPolygon(fill, bowtie);
-            graphics.DrawPolygon(border, bowtie);
+            graphics.FillPolygon(fill, valveBody);
+            graphics.DrawPolygon(border, valveBody);
+
+            using var seatBrush = new SolidBrush(AppTheme.Card);
+            graphics.FillRectangle(seatBrush, centerX - 15, body.Top + 7, 6, body.Height - 14);
+            graphics.FillRectangle(seatBrush, centerX + 9, body.Top + 7, 6, body.Height - 14);
+            graphics.DrawLine(
+                border,
+                centerX - 16,
+                centerY - 7,
+                centerX + 16,
+                centerY - 7);
+            graphics.DrawLine(
+                border,
+                centerX - 16,
+                centerY + 7,
+                centerX + 16,
+                centerY + 7);
             DrawText(
                 graphics,
                 $"节流器 {index + 1}",
                 new Rectangle(body.X - 12, body.Bottom + 7, body.Width + 24, 26),
-                _fontNormal,
+                _fontValue,
                 AppTheme.Text,
                 true);
         }

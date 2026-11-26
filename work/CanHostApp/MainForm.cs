@@ -29,12 +29,12 @@ public sealed class MainForm : Form
     private readonly ReceiveFramesModule _receiveModule = new();
     private readonly FrameTickerControl _tickerModule = new();
     private readonly PlotModule[] _plotModules;
+    private readonly PressurePlotWindowManager _pressurePlotWindowManager;
     private readonly SendFramesModule _sendModule = new();
     private readonly SupplyControlModule _supplyControlModule = new();
     private readonly DockableWorkspace _workspace = new();
     private readonly DockableModuleHost _receiveHost;
     private readonly DockableModuleHost _tickerHost;
-    private readonly DockableModuleHost[] _plotHosts;
     private readonly DockableModuleHost _sendHost;
     private readonly DockableModuleHost _supplyControlHost;
     private readonly Label _statusLabel = new();
@@ -44,7 +44,6 @@ public sealed class MainForm : Form
     private ToolStripMenuItem? _receiveExpandedItem;
     private ToolStripMenuItem? _receiveTickerItem;
     private ToolStripMenuItem? _receiveCollapsedItem;
-    private ToolStripMenuItem[] _showPlotItems = [];
     private ToolStripMenuItem? _showSendItem;
     private ToolStripMenuItem? _showSupplyControlItem;
     private ToolStripMenuItem? _darkThemeItem;
@@ -66,12 +65,7 @@ public sealed class MainForm : Form
         _plotModules = PlotDefinitions
             .Select(definition => new PlotModule(definition.Title))
             .ToArray();
-        _plotHosts = PlotDefinitions
-            .Select((definition, index) => new DockableModuleHost(
-                definition.Id,
-                definition.Title,
-                _plotModules[index]))
-            .ToArray();
+        _pressurePlotWindowManager = new PressurePlotWindowManager(_plotModules);
         _receiveHost = new DockableModuleHost("receive", "接收帧", _receiveModule);
         _tickerHost = new DockableModuleHost("ticker", "单条信息", _tickerModule);
         _sendHost = new DockableModuleHost("send", "发送帧", _sendModule);
@@ -79,14 +73,11 @@ public sealed class MainForm : Form
             "supply-control",
             "储供控制",
             _supplyControlModule);
+        _supplyControlHost.PreventDocking = true;
         _receiveHost.MinimumSize = new Size(250, 220);
         _tickerHost.MinimumSize = new Size(300, 80);
-        foreach (var plotHost in _plotHosts)
-        {
-            plotHost.MinimumSize = new Size(250, 150);
-        }
         _sendHost.MinimumSize = new Size(620, 245);
-        _supplyControlHost.MinimumSize = new Size(400, 460);
+        _supplyControlHost.MinimumSize = new Size(620, 540);
         _connectionOptions = ConnectionOptions.CreateDefault(VciAdapter.FindControlCanDll());
 
         Text = AppInfo.DisplayName;
@@ -183,10 +174,6 @@ public sealed class MainForm : Form
             _receiveCollapsedItem
         ]);
 
-        _showPlotItems = PlotDefinitions
-            .Select((definition, index) =>
-                VisibilityItem(definition.Title, GetPlotVisibility(_displayState, index)))
-            .ToArray();
         _showSupplyControlItem = VisibilityItem("储供控制", _displayState.SupplyControlVisible);
         _showSendItem = VisibilityItem("发送帧", _displayState.SendVisible);
         var restoreLayoutItem = new ToolStripMenuItem("恢复默认布局")
@@ -196,7 +183,6 @@ public sealed class MainForm : Form
         };
         restoreLayoutItem.Click += (_, _) => RestoreLayout();
         displayMenu.DropDownItems.Add(receiveMenu);
-        displayMenu.DropDownItems.AddRange(_showPlotItems);
         displayMenu.DropDownItems.Add(_showSupplyControlItem);
         displayMenu.DropDownItems.Add(_showSendItem);
         displayMenu.DropDownItems.Add(new ToolStripSeparator());
@@ -293,10 +279,6 @@ public sealed class MainForm : Form
 
         _workspace.AddModule(_receiveHost, Rectangle.Empty);
         _workspace.AddModule(_tickerHost, Rectangle.Empty);
-        foreach (var plotHost in _plotHosts)
-        {
-            _workspace.AddModule(plotHost, Rectangle.Empty);
-        }
         _workspace.AddModule(_sendHost, Rectangle.Empty);
         _workspace.AddModule(_supplyControlHost, Rectangle.Empty);
         workspace.Controls.Add(_workspace);
@@ -370,6 +352,8 @@ public sealed class MainForm : Form
         _supplyControlModule.SendAction = _sendModule.SendAction;
         _sendModule.StatusChanged += SetStatus;
         _supplyControlModule.StatusChanged += SetStatus;
+        _supplyControlModule.PressurePlotConfigurationRequested +=
+            () => _pressurePlotWindowManager.ShowConfiguration(this);
         _workspace.ModuleVisibilityChanged += WorkspaceOnModuleVisibilityChanged;
 
         KeyPreview = true;
@@ -386,6 +370,7 @@ public sealed class MainForm : Form
             _isClosing = true;
             _workspace.SaveLayout();
             _workspace.CloseAllFloatingWindows();
+            _pressurePlotWindowManager.CloseAll();
             _adapter?.Disconnect();
             _adapter?.Dispose();
         };
@@ -419,17 +404,6 @@ public sealed class MainForm : Form
                 _showSendItem.Checked = false;
             }
         }
-        else
-        {
-            var plotIndex = Array.FindIndex(
-                PlotDefinitions,
-                definition => definition.Id == e.ModuleId);
-            if (plotIndex >= 0 && plotIndex < _showPlotItems.Length)
-            {
-                _showPlotItems[plotIndex].Checked = false;
-            }
-        }
-
         ApplyModuleVisibility();
     }
 
@@ -456,48 +430,36 @@ public sealed class MainForm : Form
         }
     }
 
-    private static bool GetPlotVisibility(DisplayState state, int index)
-    {
-        return index switch
-        {
-            0 => state.MainPressurePlotVisible,
-            1 => state.Branch1PressurePlotVisible,
-            2 => state.Branch2PressurePlotVisible,
-            3 => state.Branch3PressurePlotVisible,
-            4 => state.Branch4PressurePlotVisible,
-            _ => false
-        };
-    }
-
     private void ApplyModuleVisibility(ToolStripMenuItem? sourceItem = null)
     {
         var showReceive = _receiveDisplayMode == ReceiveDisplayMode.Expanded;
         var showTicker = _receiveDisplayMode == ReceiveDisplayMode.Ticker;
-        var showPlots = _showPlotItems.Select(item => item.Checked).ToArray();
         var showSupplyControl = _showSupplyControlItem?.Checked ?? true;
         var showSend = _showSendItem?.Checked ?? true;
         _workspace.SetModuleVisible(_receiveHost, showReceive);
         _workspace.SetModuleVisible(_tickerHost, showTicker);
-        for (var index = 0; index < _plotHosts.Length; index++)
-        {
-            _workspace.SetModuleVisible(_plotHosts[index], showPlots[index]);
-        }
         _workspace.SetModuleVisible(_supplyControlHost, showSupplyControl);
+        if (showSupplyControl &&
+            !_workspace.IsModuleFloating(_supplyControlHost))
+        {
+            _workspace.FloatModule(
+                _supplyControlHost,
+                PointToScreen(new Point(ClientSize.Width / 2, ClientSize.Height / 2)));
+        }
         _workspace.SetModuleVisible(_sendHost, showSend);
         _displayState = new DisplayState(
             showReceive,
             showTicker,
-            showPlots.ElementAtOrDefault(0),
-            showPlots.ElementAtOrDefault(1),
-            showPlots.ElementAtOrDefault(2),
-            showPlots.ElementAtOrDefault(3),
-            showPlots.ElementAtOrDefault(4),
+            false,
+            false,
+            false,
+            false,
+            false,
             showSupplyControl,
             showSend);
         DisplayStateStore.Save(_displayState);
         if (!showReceive &&
             !showTicker &&
-            !showPlots.Any(value => value) &&
             !showSupplyControl &&
             !showSend)
         {
