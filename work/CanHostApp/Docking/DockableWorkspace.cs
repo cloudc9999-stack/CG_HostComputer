@@ -25,7 +25,7 @@ public sealed class DockableWorkspace : Panel
     private string LayoutPath => LayoutPathOverride ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CanHost",
-        "dock-layout-v5.6.json");
+        "dock-layout-v5.7.json");
 
     public DockableWorkspace()
     {

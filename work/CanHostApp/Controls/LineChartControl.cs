@@ -196,7 +196,7 @@ public sealed class LineChartControl : Control
         using var borderPen = new Pen(AppTheme.Border);
         graphics.DrawRectangle(borderPen, 0, 0, Width - 1, Height - 1);
 
-        var plot = new RectangleF(78, 28, Math.Max(40, Width - 102), Math.Max(40, Height - 76));
+        var plot = new RectangleF(78, 28, Math.Max(40, Width - 84), Math.Max(40, Height - 76));
         _plotBounds = plot;
         var yDivisions = GetAxisDivisionCount(plot.Height, 36, 4, 12);
         var window = GetVisibleWindow();
@@ -264,11 +264,11 @@ public sealed class LineChartControl : Control
             };
             graphics.DrawLines(linePen, screenPoints);
         }
+        graphics.Clip = oldClip;
 
         var latest = screenPoints[^1];
         using var pointBrush = new SolidBrush(PointColor);
         graphics.FillEllipse(pointBrush, latest.X - 4.5f, latest.Y - 4.5f, 9f, 9f);
-        graphics.Clip = oldClip;
 
         var latestValue = _points[^1].Value;
         var valueText = $"当前  {latestValue:N0}";
@@ -550,11 +550,15 @@ public sealed class LineChartControl : Control
             var x = plot.Left + plot.Width * index / xDivisions;
             var label = $"{value:0}s";
             var size = TextRenderer.MeasureText(label, _axisFont);
+            var labelX = Math.Clamp(
+                (int)x - size.Width / 2,
+                0,
+                Math.Max(0, Width - size.Width));
             TextRenderer.DrawText(
                 graphics,
                 label,
                 _axisFont,
-                new Point((int)x - size.Width / 2, (int)plot.Bottom + 7),
+                new Point(labelX, (int)plot.Bottom + 7),
                 TextColor);
         }
 

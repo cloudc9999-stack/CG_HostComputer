@@ -227,6 +227,16 @@ Assert(
     Math.Abs(latestAge) < 0.001 &&
     Math.Abs(latestScreenX - 210) < 0.01,
     "最新压力数据固定在右侧 0s");
+using var rightEdgeChart = new LineChartControl { Size = new Size(600, 400) };
+using var rightEdgeBitmap = new Bitmap(600, 400);
+rightEdgeChart.DrawToBitmap(rightEdgeBitmap, new Rectangle(0, 0, 600, 400));
+var plotBounds = (RectangleF?)typeof(LineChartControl)
+    .GetField("_plotBounds", BindingFlags.NonPublic | BindingFlags.Instance)
+    ?.GetValue(rightEdgeChart);
+Assert(
+    plotBounds.HasValue &&
+    Math.Abs(plotBounds.Value.Right - 594) < 0.1,
+    "压力图右侧不再预留大面积空白");
 
 using var selectionZoomChart = new LineChartControl();
 selectionZoomChart.ConfigureAxes(0, 1_000, 30);
