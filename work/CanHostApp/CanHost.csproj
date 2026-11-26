@@ -7,9 +7,9 @@
     <Nullable>enable</Nullable>
     <RootNamespace>CanHost</RootNamespace>
     <AssemblyName>储供系统控制器</AssemblyName>
-    <Version>5.3.0</Version>
-    <FileVersion>5.3.0.0</FileVersion>
-    <AssemblyVersion>5.3.0.0</AssemblyVersion>
+    <Version>5.4.0</Version>
+    <FileVersion>5.4.0.0</FileVersion>
+    <AssemblyVersion>5.4.0.0</AssemblyVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <Platforms>x64</Platforms>

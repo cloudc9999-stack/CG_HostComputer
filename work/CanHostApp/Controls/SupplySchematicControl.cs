@@ -876,8 +876,8 @@ public sealed class SupplySchematicControl : UserControl
             DrawConnector(graphics, 342, MainCenterY);
             DrawConnector(graphics, 360, MainCenterY);
             DrawConnector(graphics, 500, MainCenterY);
-            DrawConnector(graphics, 515, MainCenterY);
-            DrawConnector(graphics, 685, MainCenterY);
+            DrawConnector(graphics, 566, MainCenterY);
+            DrawConnector(graphics, 644, MainCenterY);
             DrawConnector(graphics, 702, MainCenterY);
             DrawConnector(graphics, 804, MainCenterY);
             DrawConnector(graphics, 823, MainCenterY, vertical: true);
@@ -885,7 +885,8 @@ public sealed class SupplySchematicControl : UserControl
             {
                 DrawArrow(graphics, new Point(330, MainCenterY - 10));
                 DrawArrow(graphics, new Point(490, MainCenterY - 10));
-                DrawArrow(graphics, new Point(675, MainCenterY - 10));
+                DrawArrow(graphics, new Point(558, MainCenterY - 10));
+                DrawArrow(graphics, new Point(636, MainCenterY - 10));
                 DrawArrow(graphics, new Point(830, MainCenterY - 10));
             }
         }
@@ -1135,10 +1136,10 @@ public sealed class SupplySchematicControl : UserControl
         {
             Point[] shape =
             [
-                new(520, 90),
-                new(675, 112),
-                new(675, 188),
-                new(520, 210)
+                new(580, 131),
+                new(630, 138),
+                new(630, 162),
+                new(580, 169)
             ];
             using var fill = new SolidBrush(AppTheme.Card);
             using var border = new Pen(AppTheme.Border, 2);
@@ -1147,8 +1148,8 @@ public sealed class SupplySchematicControl : UserControl
             DrawText(
                 graphics,
                 "一级减压阀",
-                new Rectangle(505, 214, 190, 32),
-                _fontNormal,
+                new Rectangle(550, 173, 110, 20),
+                _fontCompact,
                 AppTheme.Text,
                 true);
         }
