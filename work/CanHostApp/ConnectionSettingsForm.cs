@@ -231,7 +231,7 @@ public sealed class ConnectionSettingsForm : Form
             250_000 => 1,
             500_000 => 2,
             1_000_000 => 3,
-            _ => 2
+            _ => 3
         };
 
         RefreshPorts();
@@ -389,7 +389,7 @@ public sealed class ConnectionSettingsForm : Form
             1 => 250_000,
             2 => 500_000,
             3 => 1_000_000,
-            _ => 500_000
+            _ => 1_000_000
         };
         var serialBitrate = int.TryParse(_serialBitrateCombo.Text, out var rate)
             ? rate

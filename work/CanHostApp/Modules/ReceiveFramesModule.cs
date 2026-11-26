@@ -18,6 +18,12 @@ public sealed class ReceiveFramesModule : UserControl
     private readonly Button _exportButton = new();
     private readonly Button _clearButton = new();
     private readonly Panel _gridHost = new();
+    private readonly TabControl _filterTabs = new();
+    private readonly CheckBox _idFilterEnabled = new();
+    private readonly TextBox _idFilterText = new();
+    private readonly CheckBox _dlcFilterEnabled = new();
+    private readonly NumericUpDown _dlcFilterValue = new();
+    private readonly List<CanFrame> _frames = [];
     private long _frameCount;
 
     public ReceiveFramesModule()
@@ -47,6 +53,26 @@ public sealed class ReceiveFramesModule : UserControl
             return;
         }
 
+        _frames.Add(frame);
+        if (_frames.Count > 5000)
+        {
+            _frames.RemoveAt(0);
+        }
+        if (!MatchesFilters(frame))
+        {
+            return;
+        }
+
+        AddGridRow(frame);
+        if (_grid.Rows.Count > 5000)
+        {
+            _grid.Rows.RemoveAt(0);
+        }
+        ScrollToLatest();
+    }
+
+    private void AddGridRow(CanFrame frame)
+    {
         var index = _grid.Rows.Add(
             frame.Timestamp.ToString("HH:mm:ss.fff"),
             frame.TypeText,
@@ -57,19 +83,59 @@ public sealed class ReceiveFramesModule : UserControl
         row.Tag = frame;
         row.Cells["id"].Style.ForeColor = RxColor;
 
-        if (_grid.Rows.Count > 5000)
-        {
-            _grid.Rows.RemoveAt(0);
-        }
         if (_grid.Rows.Count > 0)
         {
             _grid.FirstDisplayedScrollingRowIndex = _grid.Rows.Count - 1;
         }
     }
 
+    private void ScrollToLatest()
+    {
+        if (_grid.Rows.Count > 0)
+        {
+            _grid.FirstDisplayedScrollingRowIndex = _grid.Rows.Count - 1;
+        }
+    }
+
+    private bool MatchesFilters(CanFrame frame)
+    {
+        if (_idFilterEnabled.Checked)
+        {
+            var text = _idFilterText.Text.Trim();
+            var normalized = text.StartsWith("0x", StringComparison.OrdinalIgnoreCase)
+                ? text[2..]
+                : text;
+            if (!uint.TryParse(
+                    normalized,
+                    System.Globalization.NumberStyles.HexNumber,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var id) ||
+                frame.Id != id)
+            {
+                return false;
+            }
+        }
+        if (_dlcFilterEnabled.Checked && frame.Dlc != (byte)_dlcFilterValue.Value)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private void RebuildGrid()
+    {
+        _grid.Rows.Clear();
+        foreach (var frame in _frames.Where(MatchesFilters))
+        {
+            AddGridRow(frame);
+        }
+        ScrollToLatest();
+    }
+
     public void ClearFrames()
     {
         _grid.Rows.Clear();
+        _frames.Clear();
         _frameCount = 0;
         _countLabel.Text = "接收  0";
         FramesCleared?.Invoke(this, EventArgs.Empty);
@@ -119,6 +185,53 @@ public sealed class ReceiveFramesModule : UserControl
         _clearButton.Click += (_, _) => ClearFrames();
 
         ConfigureGrid();
+        _filterTabs.Location = new Point(18, 48);
+        _filterTabs.Size = new Size(Math.Max(300, Width - 36), 64);
+        _filterTabs.Font = new Font("Microsoft YaHei UI", 8.8F, FontStyle.Bold);
+        _filterTabs.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+        var idPage = new TabPage("过滤 ID")
+        {
+            BackColor = BackgroundColor,
+            ForeColor = TextColor
+        };
+        _idFilterEnabled.Text = "启用 ID";
+        _idFilterEnabled.AutoSize = true;
+        _idFilterEnabled.ForeColor = TextColor;
+        _idFilterEnabled.Location = new Point(8, 8);
+        _idFilterText.Location = new Point(86, 6);
+        _idFilterText.Size = new Size(150, 25);
+        _idFilterText.BackColor = FieldColor;
+        _idFilterText.ForeColor = TextColor;
+        _idFilterText.BorderStyle = BorderStyle.FixedSingle;
+        _idFilterText.Font = new Font("Cascadia Mono", 9F);
+        _idFilterText.PlaceholderText = "例如 05 或 0x05";
+        _idFilterEnabled.CheckedChanged += (_, _) => RebuildGrid();
+        _idFilterText.TextChanged += (_, _) => RebuildGrid();
+        idPage.Controls.AddRange([_idFilterEnabled, _idFilterText]);
+
+        var dlcPage = new TabPage("过滤 DLC")
+        {
+            BackColor = BackgroundColor,
+            ForeColor = TextColor
+        };
+        _dlcFilterEnabled.Text = "启用 DLC";
+        _dlcFilterEnabled.AutoSize = true;
+        _dlcFilterEnabled.ForeColor = TextColor;
+        _dlcFilterEnabled.Location = new Point(8, 8);
+        _dlcFilterValue.Minimum = 0;
+        _dlcFilterValue.Maximum = 8;
+        _dlcFilterValue.Value = 8;
+        _dlcFilterValue.Location = new Point(98, 5);
+        _dlcFilterValue.Size = new Size(70, 25);
+        _dlcFilterValue.BackColor = FieldColor;
+        _dlcFilterValue.ForeColor = TextColor;
+        _dlcFilterValue.BorderStyle = BorderStyle.FixedSingle;
+        _dlcFilterEnabled.CheckedChanged += (_, _) => RebuildGrid();
+        _dlcFilterValue.ValueChanged += (_, _) => RebuildGrid();
+        dlcPage.Controls.AddRange([_dlcFilterEnabled, _dlcFilterValue]);
+        _filterTabs.TabPages.AddRange([idPage, dlcPage]);
+
         _grid.Dock = DockStyle.Fill;
         _gridHost.BackColor = FieldColor;
         _gridHost.Padding = new Padding(1);
@@ -136,6 +249,7 @@ public sealed class ReceiveFramesModule : UserControl
         Controls.AddRange(
         [
             _gridHost,
+            _filterTabs,
             title,
             _countLabel,
             _pauseCheck,
@@ -152,11 +266,16 @@ public sealed class ReceiveFramesModule : UserControl
             _clearButton.Location = compact
                 ? new Point(190, 40)
                 : new Point(ClientSize.Width - 132, 8);
+            _filterTabs.Bounds = new Rectangle(
+                18,
+                48,
+                Math.Max(280, ClientSize.Width - 36),
+                64);
             _gridHost.Bounds = new Rectangle(
                 18,
-                compact ? 78 : 48,
+                120,
                 Math.Max(20, ClientSize.Width - 36),
-                Math.Max(20, ClientSize.Height - (compact ? 94 : 64)));
+                Math.Max(20, ClientSize.Height - 136));
         };
     }
 

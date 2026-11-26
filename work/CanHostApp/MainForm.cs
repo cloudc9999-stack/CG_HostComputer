@@ -32,6 +32,7 @@ public sealed class MainForm : Form
     private readonly PressurePlotWindowManager _pressurePlotWindowManager;
     private readonly SendFramesModule _sendModule = new();
     private readonly SupplyControlModule _supplyControlModule = new();
+    private readonly ConnectionDockPanel _connectionPanel = new();
     private readonly DockableWorkspace _workspace = new();
     private readonly DockableModuleHost _receiveHost;
     private readonly DockableModuleHost _tickerHost;
@@ -40,7 +41,6 @@ public sealed class MainForm : Form
     private readonly Label _statusLabel = new();
     private readonly Label _connectionLabel = new();
 
-    private ToolStripMenuItem? _connectionToggleItem;
     private ToolStripMenuItem? _receiveExpandedItem;
     private ToolStripMenuItem? _receiveTickerItem;
     private ToolStripMenuItem? _receiveCollapsedItem;
@@ -74,7 +74,14 @@ public sealed class MainForm : Form
             "储供控制",
             _supplyControlModule);
         _supplyControlHost.PreventDocking = true;
-        _receiveHost.MinimumSize = new Size(250, 220);
+        _receiveHost.PreventDocking = true;
+        _tickerHost.PreventDocking = true;
+        _sendHost.PreventDocking = true;
+        _supplyControlHost.ShowModuleHeader = false;
+        _receiveHost.ShowModuleHeader = false;
+        _tickerHost.ShowModuleHeader = false;
+        _sendHost.ShowModuleHeader = false;
+        _receiveHost.MinimumSize = new Size(660, 460);
         _tickerHost.MinimumSize = new Size(300, 80);
         _sendHost.MinimumSize = new Size(620, 245);
         _supplyControlHost.MinimumSize = new Size(620, 540);
@@ -109,6 +116,7 @@ public sealed class MainForm : Form
         var statusBar = BuildStatusBar();
 
         body.Controls.Add(workspace);
+        body.Controls.Add(_connectionPanel);
         body.Controls.Add(statusBar);
         root.Controls.Add(body);
         root.Controls.Add(menu);
@@ -126,37 +134,6 @@ public sealed class MainForm : Form
             Padding = new Padding(14, 3, 0, 3),
             Renderer = new ToolStripProfessionalRenderer(new DarkMenuColorTable())
         };
-
-        var optionsMenu = new ToolStripMenuItem("选项") { ForeColor = TextColor };
-        var settingsItem = new ToolStripMenuItem("通信配置…")
-        {
-            ShortcutKeys = Keys.Control | Keys.Oemcomma,
-            ForeColor = TextColor,
-            BackColor = FieldColor
-        };
-        settingsItem.Click += (_, _) => OpenConnectionSettings();
-        _connectionToggleItem = new ToolStripMenuItem("连接")
-        {
-            ShortcutKeys = Keys.Control | Keys.L,
-            ForeColor = TextColor,
-            BackColor = FieldColor
-        };
-        _connectionToggleItem.Click += (_, _) => ToggleConnection();
-
-        var exitItem = new ToolStripMenuItem("退出")
-        {
-            ShortcutKeys = Keys.Alt | Keys.F4,
-            ForeColor = TextColor,
-            BackColor = FieldColor
-        };
-        exitItem.Click += (_, _) => Close();
-        optionsMenu.DropDownItems.AddRange(
-        [
-            settingsItem,
-            _connectionToggleItem,
-            new ToolStripSeparator(),
-            exitItem
-        ]);
 
         var displayMenu = new ToolStripMenuItem("显示") { ForeColor = TextColor };
         var receiveMenu = new ToolStripMenuItem("接收帧显示")
@@ -194,12 +171,11 @@ public sealed class MainForm : Form
             ForeColor = TextColor,
             BackColor = FieldColor
         };
-        aboutItem.Click += (_, _) => MessageBox.Show(
-            this,
-            $"{AppInfo.ProductName}\n版本 V{AppInfo.Version}\n\n模块化 CAN 接收、绘图与发送工具",
-            "关于",
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Information);
+        aboutItem.Click += (_, _) =>
+        {
+            using var dialog = new AboutForm();
+            dialog.ShowDialog(this);
+        };
         helpMenu.DropDownItems.Add(aboutItem);
 
         var settingsMenu = new ToolStripMenuItem("设置") { ForeColor = TextColor };
@@ -225,7 +201,7 @@ public sealed class MainForm : Form
         themeMenu.DropDownItems.AddRange([_darkThemeItem, _lightThemeItem]);
         settingsMenu.DropDownItems.Add(themeMenu);
 
-        menu.Items.AddRange([optionsMenu, displayMenu, settingsMenu, helpMenu]);
+        menu.Items.AddRange([displayMenu, settingsMenu, helpMenu]);
         MainMenuStrip = menu;
         return menu;
     }
@@ -316,7 +292,7 @@ public sealed class MainForm : Form
         _statusLabel.ForeColor = MutedColor;
         _statusLabel.Font = new Font("Microsoft YaHei UI", 8.6F);
         _statusLabel.AutoEllipsis = true;
-        _statusLabel.Text = "就绪 · 打开“选项 > 通信配置”连接 CAN 适配器";
+        _statusLabel.Text = "就绪 · 请在左上角选择板卡与波特率后连接";
 
         _connectionLabel.Dock = DockStyle.Fill;
         _connectionLabel.Margin = new Padding(0);
@@ -334,6 +310,13 @@ public sealed class MainForm : Form
 
     private void BindEvents()
     {
+        _connectionPanel.ConnectRequested += options =>
+        {
+            var error = ConnectAdapter(options);
+            UpdateConnectionDisplay();
+            return error;
+        };
+        _connectionPanel.DisconnectRequested += DisconnectAdapter;
         _receiveModule.FrameActivated += frame => _sendModule.LoadFrame(frame);
         _receiveModule.FramesCleared += (_, _) =>
         {
@@ -352,6 +335,7 @@ public sealed class MainForm : Form
         _supplyControlModule.SendAction = _sendModule.SendAction;
         _sendModule.StatusChanged += SetStatus;
         _supplyControlModule.StatusChanged += SetStatus;
+        _supplyControlModule.DeviceSnChanged += _connectionPanel.SetDeviceSn;
         _supplyControlModule.PressurePlotConfigurationRequested +=
             () => _pressurePlotWindowManager.ShowConfiguration(this);
         _workspace.ModuleVisibilityChanged += WorkspaceOnModuleVisibilityChanged;
@@ -437,7 +421,21 @@ public sealed class MainForm : Form
         var showSupplyControl = _showSupplyControlItem?.Checked ?? true;
         var showSend = _showSendItem?.Checked ?? true;
         _workspace.SetModuleVisible(_receiveHost, showReceive);
+        if (showReceive && !_workspace.IsModuleFloating(_receiveHost))
+        {
+            _workspace.FloatModule(
+                _receiveHost,
+                PointToScreen(new Point(340, 190)));
+        }
         _workspace.SetModuleVisible(_tickerHost, showTicker);
+        if (showTicker && !_workspace.IsModuleFloating(_tickerHost))
+        {
+            _workspace.FloatModule(
+                _tickerHost,
+                PointToScreen(new Point(
+                    Math.Max(360, ClientSize.Width - 390),
+                    150)));
+        }
         _workspace.SetModuleVisible(_supplyControlHost, showSupplyControl);
         if (showSupplyControl &&
             !_workspace.IsModuleFloating(_supplyControlHost))
@@ -447,6 +445,14 @@ public sealed class MainForm : Form
                 PointToScreen(new Point(ClientSize.Width / 2, ClientSize.Height / 2)));
         }
         _workspace.SetModuleVisible(_sendHost, showSend);
+        if (showSend && !_workspace.IsModuleFloating(_sendHost))
+        {
+            _workspace.FloatModule(
+                _sendHost,
+                PointToScreen(new Point(
+                    Math.Max(340, ClientSize.Width / 4),
+                    Math.Max(260, ClientSize.Height - 300))));
+        }
         _displayState = new DisplayState(
             showReceive,
             showTicker,
@@ -475,39 +481,6 @@ public sealed class MainForm : Form
     {
         _workspace.RestoreDefaultLayout();
         ApplyModuleVisibility();
-    }
-
-    private void OpenConnectionSettings()
-    {
-        using var dialog = new ConnectionSettingsForm(
-            _connectionOptions,
-            _adapter?.IsConnected == true,
-            _connectedSummary,
-            ConnectAdapter,
-            DisconnectAdapter);
-        dialog.ShowDialog(this);
-        _connectionOptions = dialog.Options;
-        UpdateConnectionDisplay();
-    }
-
-    private void ToggleConnection()
-    {
-        if (_adapter?.IsConnected == true)
-        {
-            DisconnectAdapter();
-            return;
-        }
-
-        var error = ConnectAdapter(_connectionOptions);
-        if (!string.IsNullOrWhiteSpace(error))
-        {
-            MessageBox.Show(
-                this,
-                error,
-                AppInfo.DisplayName,
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning);
-        }
     }
 
     private string? ConnectAdapter(ConnectionOptions options)
@@ -590,9 +563,10 @@ public sealed class MainForm : Form
         var connected = adapter?.IsConnected == true;
         _sendModule.SetConnected(connected);
         _supplyControlModule.SetCanAvailable(connected);
-        if (_connectionToggleItem is not null)
+        _connectionPanel.SetConnectionState(connected, _connectedSummary);
+        if (!connected)
         {
-            _connectionToggleItem.Text = connected ? "断开连接" : "连接";
+            _connectionPanel.SetDeviceSn("设备 SN：--");
         }
         UpdateConnectionDisplay();
     }
@@ -623,6 +597,7 @@ public sealed class MainForm : Form
             _receiveModule.AddFrame(e.Frame);
             _tickerModule.ShowFrame(e.Frame);
             _supplyControlModule.ProcessFrame(e.Frame);
+            _connectionPanel.SetDeviceSn(_supplyControlModule.ConnectedSnText);
             if (SensorReportParser.TryParse(e.Frame, out var report))
             {
                 AppendPressurePlotValues(report);
@@ -662,7 +637,7 @@ public sealed class MainForm : Form
         if (string.IsNullOrWhiteSpace(message))
         {
             _statusLabel.ForeColor = MutedColor;
-            _statusLabel.Text = "就绪 · 各功能模块独立运行";
+            _statusLabel.Text = "就绪 · 功能窗口可独立最小化、最大化和关闭";
         }
         else
         {

@@ -62,7 +62,7 @@ public sealed class SupplyConnectionModule : UserControl
     {
         if (!_canAvailable)
         {
-            ShowWarning("请先打开“选项 → 通信配置”连接 CAN 适配器。");
+            ShowWarning("请先在主窗口左上角连接 CAN 适配器。");
             return;
         }
 

@@ -10,7 +10,7 @@ public sealed record ConnectionOptions(
 {
     public static ConnectionOptions CreateDefault(string? controlCanDllPath) => new(
         AdapterIndex: 2,
-        CanBitrate: 500_000,
+        CanBitrate: 1_000_000,
         Channel: 1,
         Port: string.Empty,
         SerialBitrate: 115_200,

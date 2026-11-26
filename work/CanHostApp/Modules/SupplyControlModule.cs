@@ -18,7 +18,6 @@ public sealed class SupplyControlModule : UserControl
     private readonly Panel _dutyEditorBar = new();
     private readonly Panel _connectionHost = new();
     private readonly Panel _connectionHeader = new();
-    private readonly Button _connectionToggleButton = new();
     private readonly Button _controlConfigButton = new();
     private readonly Label _schematicTitle = new();
     private readonly NumericUpDown[] _dutyInputs = new NumericUpDown[4];
@@ -43,7 +42,6 @@ public sealed class SupplyControlModule : UserControl
     private Func<CanFrame, string?>? _sendAction;
     private bool _canAvailable;
     private bool _supplyLinkConnected;
-    private bool _connectionExpanded;
     private bool _requestedSelfLockOpen;
     private bool _selfLockOpen;
     private int _pendingSolenoidIndex;
@@ -82,6 +80,7 @@ public sealed class SupplyControlModule : UserControl
         _connection.StatusChanged += message =>
         {
             StatusChanged?.Invoke(message);
+            DeviceSnChanged?.Invoke(_connection.ConnectedSnDisplayText);
         };
         _connection.LinkStateChanged += connected =>
         {
@@ -96,7 +95,9 @@ public sealed class SupplyControlModule : UserControl
     }
 
     public event Action<string?>? StatusChanged;
+    public event Action<string>? DeviceSnChanged;
     public event Action? PressurePlotConfigurationRequested;
+    public string ConnectedSnText => _connection.ConnectedSnDisplayText;
     public bool IsSelfLockOpen => _selfLockOpen;
     public bool IsGasFlowEnabled => _schematic.GasFlowEnabled;
     public bool IsSolenoidControlPending =>
@@ -1094,15 +1095,6 @@ public sealed class SupplyControlModule : UserControl
         _connectionHeader.Dock = DockStyle.Top;
         _connectionHeader.Height = 34;
         _connectionHeader.BackColor = AppTheme.Card;
-        _connectionToggleButton.Text = "展开连接";
-        _connectionToggleButton.FlatStyle = FlatStyle.Flat;
-        _connectionToggleButton.FlatAppearance.BorderColor = AppTheme.Border;
-        _connectionToggleButton.BackColor = AppTheme.SecondaryButton;
-        _connectionToggleButton.ForeColor = AppTheme.Text;
-        _connectionToggleButton.Font = new Font("Microsoft YaHei UI", 8.5F, FontStyle.Bold);
-        _connectionToggleButton.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-        _connectionToggleButton.Bounds = new Rectangle(Width - 96, 5, 86, 25);
-        _connectionToggleButton.Click += (_, _) => ToggleConnectionSection();
         _controlConfigButton.Text = "配置";
         _controlConfigButton.FlatStyle = FlatStyle.Flat;
         _controlConfigButton.FlatAppearance.BorderColor = AppTheme.Border;
@@ -1113,14 +1105,13 @@ public sealed class SupplyControlModule : UserControl
         _controlConfigButton.Bounds = new Rectangle(Width - 174, 5, 70, 25);
         _controlConfigButton.Click +=
             (_, _) => PressurePlotConfigurationRequested?.Invoke();
-        _connectionHeader.Controls.AddRange([_controlConfigButton, _connectionToggleButton]);
+        _connectionHeader.Controls.Add(_controlConfigButton);
         _connectionHost.Controls.Add(_connection);
         _connectionHost.Controls.Add(_connectionHeader);
-        _connection.Visible = false;
+        _connection.Visible = true;
         Resize += (_, _) =>
         {
             _controlConfigButton.Left = Width - 174;
-            _connectionToggleButton.Left = Width - 96;
         };
 
         BuildDutyEditorBar();
@@ -1129,7 +1120,7 @@ public sealed class SupplyControlModule : UserControl
         _layout.ColumnCount = 1;
         _layout.RowCount = 2;
         _layout.BackColor = BackgroundColor;
-        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34F));
+        _layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 96F));
         _layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _layout.Controls.Add(_connectionHost, 0, 0);
         _layout.Controls.Add(_schematicHost, 0, 1);
@@ -1350,14 +1341,6 @@ public sealed class SupplyControlModule : UserControl
         button.FlatAppearance.BorderColor = AppTheme.Border;
         button.FlatAppearance.BorderSize = 1;
         return button;
-    }
-
-    private void ToggleConnectionSection()
-    {
-        _connectionExpanded = !_connectionExpanded;
-        _connection.Visible = _connectionExpanded;
-        _layout.RowStyles[0].Height = _connectionExpanded ? 100 : 34;
-        _connectionToggleButton.Text = _connectionExpanded ? "收起连接" : "展开连接";
     }
 
     private enum PendingCommandType

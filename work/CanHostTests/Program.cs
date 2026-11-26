@@ -64,6 +64,9 @@ Assert(!malformedAccepted, "非法帧不应被接受");
 var pcanMessageType = typeof(PcanAdapter).GetNestedType("TpcanMsg", BindingFlags.NonPublic)
     ?? throw new InvalidOperationException("找不到 PCAN 消息结构体。");
 Assert(Marshal.SizeOf(pcanMessageType) == 14, "PCAN 消息结构体大小必须为 14 字节");
+Assert(
+    ConnectionOptions.CreateDefault(VciAdapter.FindControlCanDll()).CanBitrate == 1_000_000,
+    "默认 CAN 波特率必须为 1 Mbit/s");
 
 var protocolParser = new CanProtocolV1Parser();
 CanFrame SingleByteFrame(byte value) => new(
@@ -1312,17 +1315,39 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             var receiveModeField = typeof(MainForm).GetField(
                 "_receiveDisplayMode",
                 BindingFlags.NonPublic | BindingFlags.Instance);
+            var connectionPanel = (ConnectionDockPanel?)typeof(MainForm)
+                .GetField("_connectionPanel", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(mainForm);
             Assert(
                 workspace is not null &&
                 receiveHost is not null &&
                 tickerHost is not null &&
-                supplyHost?.PreventDocking == true &&
+                supplyHost is not null &&
                 sendHost is not null &&
                 receiveModeType is not null &&
                 setReceiveModeMethod is not null &&
                 ticker is not null &&
-                receiveModeField is not null,
+                receiveModeField is not null &&
+                connectionPanel is not null &&
+                receiveHost.PreventDocking &&
+                tickerHost.PreventDocking &&
+                supplyHost.PreventDocking &&
+                sendHost.PreventDocking &&
+                !receiveHost.ShowModuleHeader &&
+                !tickerHost.ShowModuleHeader &&
+                !supplyHost.ShowModuleHeader &&
+                !sendHost.ShowModuleHeader,
                 "未找到可停靠模块控件");
+            Assert(
+                connectionPanel!.Dock == DockStyle.Left &&
+                connectionPanel.CurrentOptions.CanBitrate == 1_000_000,
+                "板卡连接与通信配置永久显示在主界面左侧");
+            connectionPanel.SetDeviceSn("设备 SN：0x78C27591");
+            Assert(
+                EnumerateControls(connectionPanel)
+                    .OfType<Label>()
+                    .Any(label => label.Text == "设备 SN：0x78C27591"),
+                "左上连接面板实时显示设备 SN");
 
             setReceiveModeMethod!.Invoke(
                 mainForm,
@@ -1330,6 +1355,10 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             Assert(
                 receiveModeField!.GetValue(mainForm)?.ToString() == "Collapsed",
                 "接收区完全折叠状态");
+            Assert(
+                !workspace!.IsModuleVisible(receiveHost!) &&
+                !workspace.IsModuleVisible(tickerHost!),
+                "接收区完全折叠时两个接收窗口均隐藏");
 
             setReceiveModeMethod.Invoke(
                 mainForm,
@@ -1337,6 +1366,9 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             Assert(
                 receiveModeField!.GetValue(mainForm)?.ToString() == "Ticker",
                 "接收区单条滚动状态");
+            Assert(
+                tickerHost!.IsFloating && tickerHost.Parent is Form,
+                "单条信息窗口永久独立");
 
             setReceiveModeMethod.Invoke(
                 mainForm,
@@ -1344,18 +1376,88 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             Assert(
                 receiveModeField!.GetValue(mainForm)?.ToString() == "Expanded",
                 "接收区全展开状态");
+            Assert(
+                receiveHost!.IsFloating && receiveHost.Parent is Form,
+                "接收帧窗口永久独立");
+
+            var receiveModule = (ReceiveFramesModule?)typeof(MainForm)
+                .GetField("_receiveModule", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(mainForm);
+            var receiveGrid = (DataGridView?)typeof(ReceiveFramesModule)
+                .GetField("_grid", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(receiveModule);
+            var idFilterEnabled = (CheckBox?)typeof(ReceiveFramesModule)
+                .GetField("_idFilterEnabled", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(receiveModule);
+            var idFilterText = (TextBox?)typeof(ReceiveFramesModule)
+                .GetField("_idFilterText", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(receiveModule);
+            var dlcFilterEnabled = (CheckBox?)typeof(ReceiveFramesModule)
+                .GetField("_dlcFilterEnabled", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(receiveModule);
+            var dlcFilterValue = (NumericUpDown?)typeof(ReceiveFramesModule)
+                .GetField("_dlcFilterValue", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.GetValue(receiveModule);
+            Assert(
+                receiveModule is not null &&
+                receiveGrid is not null &&
+                idFilterEnabled is not null &&
+                idFilterText is not null &&
+                dlcFilterEnabled is not null &&
+                dlcFilterValue is not null,
+                "接收帧 ID/DLC 过滤控件");
+            idFilterEnabled!.Checked = true;
+            idFilterText!.Text = "0x05";
+            receiveModule!.AddFrame(new CanFrame(
+                0x05,
+                false,
+                false,
+                2,
+                [0x01, 0x03],
+                DateTime.Now,
+                FrameDirection.Rx));
+            receiveModule.AddFrame(new CanFrame(
+                0x06,
+                false,
+                false,
+                2,
+                [0x12, 0x34],
+                DateTime.Now,
+                FrameDirection.Rx));
+            Assert(
+                receiveGrid!.Rows.Count == 1,
+                "接收帧 ID 过滤");
+            idFilterEnabled.Checked = false;
+            dlcFilterEnabled!.Checked = true;
+            dlcFilterValue!.Value = 8;
+            receiveModule.AddFrame(new CanFrame(
+                0x06,
+                false,
+                false,
+                8,
+                [1, 2, 3, 4, 5, 6, 7, 8],
+                DateTime.Now,
+                FrameDirection.Rx));
+            Assert(
+                receiveGrid.Rows.Count == 1,
+                "接收帧 DLC 过滤");
+            if (receiveHost.Parent is Form floatingReceiveForm)
+            {
+                Assert(
+                    floatingReceiveForm.MinimizeBox &&
+                    floatingReceiveForm.MaximizeBox,
+                    "独立接收窗使用 Windows 原生最小化和最大化按钮");
+                RenderForm(floatingReceiveForm, "receive-window-preview.png");
+            }
 
             var displayMenu = mainForm.MainMenuStrip?.Items
                 .OfType<ToolStripMenuItem>()
                 .FirstOrDefault(item => item.Text == "显示");
-            var optionsMenu = mainForm.MainMenuStrip?.Items
-                .OfType<ToolStripMenuItem>()
-                .FirstOrDefault(item => item.Text == "选项");
             Assert(
-                optionsMenu?.DropDownItems
+                mainForm.MainMenuStrip?.Items
                     .OfType<ToolStripMenuItem>()
-                    .Any(item => item.Text == "储供连接…") == false,
-                "储供连接不再单独显示");
+                    .Any(item => item.Text == "选项") == false,
+                "通信配置和连接操作不再放在选项菜单");
             Assert(
                 displayMenu?.DropDownItems
                     .OfType<ToolStripMenuItem>()
@@ -1399,9 +1501,9 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
             Assert(floatingSendForm.Visible, "重新勾选后可恢复浮动窗口");
             workspace.DockFloatingModule(sendModuleHost);
             Assert(
-                !sendModuleHost.IsFloating &&
-                sendModuleHost.Parent == workspace,
-                "浮动窗口可重新停靠回主窗口");
+                sendModuleHost.IsFloating &&
+                sendModuleHost.Parent is Form,
+                "发送帧窗口永久独立且不能停靠回主窗口");
 
             foreach (var module in workspace.Modules)
             {
@@ -1693,6 +1795,15 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
                 _ => null,
                 () => { });
             RenderForm(settingsForm, "settings-preview.png");
+
+            using var aboutForm = new AboutForm();
+            Assert(
+                EnumerateControls(aboutForm)
+                    .OfType<LinkLabel>()
+                    .Any(link =>
+                        link.Text ==
+                        "https://github.com/cloudc9999-stack/CG_HostComputer"),
+                "关于窗口显示最新版本链接");
 
             using var plotSettingsForm = new PlotSettingsForm(
                 chart!.YMinimum,

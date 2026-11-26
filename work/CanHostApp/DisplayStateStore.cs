@@ -32,7 +32,7 @@ public static class DisplayStateStore
     private static string StorePath => PathOverride ?? Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "CanHost",
-        "display-v5.4.json");
+        "display-v5.5.json");
 
     public static DisplayState Load()
     {

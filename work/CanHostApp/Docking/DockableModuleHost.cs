@@ -22,6 +22,7 @@ public sealed class DockableModuleHost : UserControl
     private Size _restoreMinimumSize;
     private bool _isMinimized;
     private bool _isMaximized;
+    private bool _showModuleHeader = true;
 
     public DockableModuleHost(string moduleId, string title, Control content)
     {
@@ -117,6 +118,19 @@ public sealed class DockableModuleHost : UserControl
     public string ModuleTitle { get; }
     public Rectangle PreferredBounds { get; set; }
     public bool PreventDocking { get; set; }
+    public bool ShowModuleHeader
+    {
+        get => _showModuleHeader;
+        set
+        {
+            _showModuleHeader = value;
+            _dragBar.Visible = value;
+            Padding = value
+                ? new Padding(5, 28, 5, 5)
+                : new Padding(5);
+            _content.Visible = true;
+        }
+    }
 
     public DockableWorkspace? Workspace => _workspace ?? Parent as DockableWorkspace;
 
