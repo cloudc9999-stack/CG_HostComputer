@@ -1024,6 +1024,21 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
                     supplyControl.GetTemperatureText(1) == $"{temperature1:0.0}°C" &&
                     supplyControl.GetTemperatureText(4) == $"{temperature4:0.0}°C",
                     "储供界面显示压力原始值和 PT1000 温度");
+                supplyControl.ProcessFrame(new CanFrame(
+                    0x08,
+                    false,
+                    false,
+                    8,
+                    [0x03, 0xE8, 0x03, 0xE8, 0x03, 0xE8, 0x03, 0xE8],
+                    DateTime.Now,
+                    FrameDirection.Rx));
+                Pt1000TemperatureConverter.TryConvertRaw(1000, out var updatedTemperature);
+                Assert(
+                    Enumerable.Range(1, 4)
+                        .All(branch =>
+                            supplyControl.GetTemperatureText(branch) ==
+                            $"{updatedTemperature:0.0}°C"),
+                    "连续收到温度报文时实时刷新四路温度");
 
                 var sensorTimeoutMethod = typeof(SupplyControlModule).GetMethod(
                     "CheckSensorTimeouts",

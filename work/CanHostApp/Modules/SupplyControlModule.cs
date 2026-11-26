@@ -340,6 +340,7 @@ public sealed class SupplyControlModule : UserControl
                         branch,
                         FormatTemperatureValue(report.Values[branch - 1]));
                 }
+                _schematic.RefreshTemperatureDisplay();
                 break;
         }
     }

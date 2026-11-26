@@ -96,6 +96,11 @@ public sealed class SupplySchematicControl : UserControl
         _surface.AppendResponseLog(type, message);
     public void SetPressure(int sensor, string value) => _surface.SetPressure(sensor, value);
     public void SetTemperature(int branch, string value) => _surface.SetTemperature(branch, value);
+    public void RefreshTemperatureDisplay()
+    {
+        _surface.Invalidate();
+        _surface.Update();
+    }
     public void SetPtcState(int ptc, bool on, bool automatic) =>
         _surface.SetPtcState(ptc, on, automatic);
     public void FlashBranch(int branch) => _surface.FlashBranch(branch);
