@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CanHost</RootNamespace>
+    <AssemblyName>储供系统控制器</AssemblyName>
+    <Version>5.2.0</Version>
+    <FileVersion>5.2.0.0</FileVersion>
+    <AssemblyVersion>5.2.0.0</AssemblyVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RestoreIgnoreFailedSources>true</RestoreIgnoreFailedSources>
+  </PropertyGroup>
+  <ItemGroup>
+    <None
+      Include="..\CanHost.VciBridge\CanHost.VciBridge.exe"
+      Link="CanHost.VciBridge.exe"
+      CopyToOutputDirectory="PreserveNewest"
+      CopyToPublishDirectory="PreserveNewest"
+      Condition="Exists('..\CanHost.VciBridge\CanHost.VciBridge.exe')" />
+  </ItemGroup>
+</Project>
