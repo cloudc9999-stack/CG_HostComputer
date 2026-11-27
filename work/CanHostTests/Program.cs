@@ -1024,6 +1024,26 @@ if (args.Contains("--render", StringComparer.OrdinalIgnoreCase))
                     supplyControl.GetTemperatureText(1) == $"{temperature1:0.0}°C" &&
                     supplyControl.GetTemperatureText(4) == $"{temperature4:0.0}°C",
                     "储供界面显示压力原始值和 PT1000 温度");
+                Assert(
+                    supplySchematic!.GetMainPressureUnit() == PressureDisplayUnit.Digital &&
+                    Enumerable.Range(1, 4).All(branch =>
+                        supplySchematic.GetPressureUnit(branch) ==
+                        PressureDisplayUnit.Digital),
+                    "压力显示单位默认数字量");
+                supplySchematic.SetMainPressure("2048");
+                supplySchematic.SetPressure(1, "4095");
+                supplySchematic.SetMainPressureUnit(PressureDisplayUnit.Voltage);
+                supplySchematic.SetPressureUnit(1, PressureDisplayUnit.Voltage);
+                Assert(
+                    supplySchematic.GetMainPressureText() == "2.5006 V" &&
+                    supplySchematic.GetPressureText(1) == "5.0000 V",
+                    "压力数字量按 value/4095*5 换算为电压");
+                supplySchematic.SetMainPressureUnit(PressureDisplayUnit.Digital);
+                supplySchematic.SetPressureUnit(1, PressureDisplayUnit.Digital);
+                Assert(
+                    supplySchematic.GetMainPressureText() == "2048" &&
+                    supplySchematic.GetPressureText(1) == "4095",
+                    "压力单位切回数字量");
                 supplyControl.ProcessFrame(new CanFrame(
                     0x08,
                     false,

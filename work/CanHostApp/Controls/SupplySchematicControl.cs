@@ -1,6 +1,13 @@
+using System.Globalization;
 using System.Drawing.Drawing2D;
 
 namespace CanHost.Controls;
+
+public enum PressureDisplayUnit
+{
+    Digital,
+    Voltage
+}
 
 public enum ResponseLogType
 {
@@ -24,6 +31,7 @@ public sealed class SupplySchematicControl : UserControl
     private const int DesignWidth = 1800;
     private const int DesignHeight = 780;
     private static readonly int[] DesignBranchCenters = [150, 320, 490, 660];
+    private static readonly Rectangle MainPressureBody = new(710, 94, 88, 112);
 
     private readonly SchematicSurface _surface = new();
 
@@ -70,12 +78,16 @@ public sealed class SupplySchematicControl : UserControl
     public bool IsBranchFlowEnabled(int branch) => _surface.IsBranchFlowEnabled(branch);
     public string GetMainPressureText() => _surface.GetMainPressureText();
     public string GetPressureText(int sensor) => _surface.GetPressureText(sensor);
+    public PressureDisplayUnit GetMainPressureUnit() => _surface.GetMainPressureUnit();
+    public PressureDisplayUnit GetPressureUnit(int sensor) => _surface.GetPressureUnit(sensor);
     public string GetTemperatureText(int branch) => _surface.GetTemperatureText(branch);
     public void SetGasFlowEnabled(bool enabled) => _surface.SetGasFlowEnabled(enabled);
     public void SetSelfLockControlEnabled(bool enabled) => _surface.SetSelfLockControlEnabled(enabled);
     public void SetSelfLockDisabledHint(string text) => _surface.SetSelfLockDisabledHint(text);
     public void SetSelfLockValveState(string value) => _surface.SetSelfLockValveState(value);
     public void SetMainPressure(string value) => _surface.SetMainPressure(value);
+    public void SetMainPressureUnit(PressureDisplayUnit unit) =>
+        _surface.SetMainPressureUnit(unit);
     public void SetSolenoidRatio(int branch, string value) => _surface.SetSolenoidRatio(branch, value);
     public void SetSolenoidValues(
         int branch,
@@ -95,6 +107,8 @@ public sealed class SupplySchematicControl : UserControl
     public void AppendResponseLog(ResponseLogType type, string message) =>
         _surface.AppendResponseLog(type, message);
     public void SetPressure(int sensor, string value) => _surface.SetPressure(sensor, value);
+    public void SetPressureUnit(int sensor, PressureDisplayUnit unit) =>
+        _surface.SetPressureUnit(sensor, unit);
     public void SetTemperature(int branch, string value) => _surface.SetTemperature(branch, value);
     public void RefreshTemperatureDisplay()
     {
@@ -127,6 +141,14 @@ public sealed class SupplySchematicControl : UserControl
         private readonly string[] _pressureTargetTexts = ["目标 --", "目标 --", "目标 --", "目标 --"];
         private readonly bool[] _solenoidAutoModes = [false, false, false, false];
         private readonly string[] _pressures = ["--", "--", "--", "--"];
+        private readonly ushort?[] _pressureRawValues = new ushort?[4];
+        private readonly PressureDisplayUnit[] _pressureUnits =
+        [
+            PressureDisplayUnit.Digital,
+            PressureDisplayUnit.Digital,
+            PressureDisplayUnit.Digital,
+            PressureDisplayUnit.Digital
+        ];
         private readonly string[] _temperatures = ["--", "--", "--", "--"];
         private readonly bool[] _ptcOnStates = [false, false, false, false];
         private readonly bool[] _ptcAutoModes = [false, false, false, false];
@@ -164,6 +186,8 @@ public sealed class SupplySchematicControl : UserControl
 
         private string _selfLockState = "未接入";
         private string _mainPressure = "--";
+        private ushort? _mainPressureRawValue;
+        private PressureDisplayUnit _mainPressureUnit = PressureDisplayUnit.Digital;
         private int _flashBranch = -1;
         private bool _canControl;
         private bool _selfLockControlEnabled = true;
@@ -177,6 +201,7 @@ public sealed class SupplySchematicControl : UserControl
         private float _selfLockTargetOpen;
         private float _selfLockVisualOpen;
         private ContextMenuStrip? _responseFilterMenu;
+        private ContextMenuStrip? _pressureUnitMenu;
 
         public SchematicSurface()
         {
@@ -457,9 +482,20 @@ public sealed class SupplySchematicControl : UserControl
         public IReadOnlyList<ResponseLogEntry> ResponseLog => _responseLog;
         public string GetSolenoidRatioText(int branch) =>
             branch is >= 1 and <= 4 ? _ratios[branch - 1] : "--";
-        public string GetMainPressureText() => _mainPressure;
+        public string GetMainPressureText() =>
+            FormatPressureValue(_mainPressure, _mainPressureRawValue, _mainPressureUnit);
         public string GetPressureText(int sensor) =>
-            sensor is >= 1 and <= 4 ? _pressures[sensor - 1] : "--";
+            sensor is >= 1 and <= 4
+                ? FormatPressureValue(
+                    _pressures[sensor - 1],
+                    _pressureRawValues[sensor - 1],
+                    _pressureUnits[sensor - 1])
+                : "--";
+        public PressureDisplayUnit GetMainPressureUnit() => _mainPressureUnit;
+        public PressureDisplayUnit GetPressureUnit(int sensor) =>
+            sensor is >= 1 and <= 4
+                ? _pressureUnits[sensor - 1]
+                : PressureDisplayUnit.Digital;
         public string GetTemperatureText(int branch) =>
             branch is >= 1 and <= 4 ? _temperatures[branch - 1] : "--";
         public bool IsBranchFlowEnabled(int branch) =>
@@ -513,6 +549,13 @@ public sealed class SupplySchematicControl : UserControl
         public void SetMainPressure(string value)
         {
             _mainPressure = value;
+            _mainPressureRawValue = ParsePressureRawValue(value);
+            Invalidate();
+        }
+
+        public void SetMainPressureUnit(PressureDisplayUnit unit)
+        {
+            _mainPressureUnit = unit;
             Invalidate();
         }
 
@@ -599,8 +642,43 @@ public sealed class SupplySchematicControl : UserControl
             if (sensor is >= 1 and <= 4)
             {
                 _pressures[sensor - 1] = value;
+                _pressureRawValues[sensor - 1] = ParsePressureRawValue(value);
                 Invalidate();
             }
+        }
+
+        public void SetPressureUnit(int sensor, PressureDisplayUnit unit)
+        {
+            if (sensor is >= 1 and <= 4)
+            {
+                _pressureUnits[sensor - 1] = unit;
+                Invalidate();
+            }
+        }
+
+        private static ushort? ParsePressureRawValue(string value)
+        {
+            return ushort.TryParse(
+                value,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var rawValue)
+                ? rawValue
+                : null;
+        }
+
+        private static string FormatPressureValue(
+            string fallback,
+            ushort? rawValue,
+            PressureDisplayUnit unit)
+        {
+            if (!rawValue.HasValue)
+            {
+                return fallback;
+            }
+            return unit == PressureDisplayUnit.Voltage
+                ? $"{rawValue.Value / 4095.0 * 5.0:0.0000} V"
+                : rawValue.Value.ToString(CultureInfo.InvariantCulture);
         }
 
         public void SetTemperature(int branch, string value)
@@ -663,6 +741,11 @@ public sealed class SupplySchematicControl : UserControl
                 Cursor = Cursors.Hand;
                 return;
             }
+            if (IsPressureUnitAt(designPoint))
+            {
+                Cursor = Cursors.Hand;
+                return;
+            }
             Cursor = (_selfLockControlEnabled &&
                       _canControl &&
                       (SelfLockOpenRect.Contains(designPoint) ||
@@ -677,9 +760,18 @@ public sealed class SupplySchematicControl : UserControl
         protected override void OnMouseClick(MouseEventArgs e)
         {
             base.OnMouseClick(e);
-            if (_canControl && e.Button == MouseButtons.Left)
+            if (e.Button != MouseButtons.Left)
             {
-                var designPoint = ToDesignPoint(e.Location);
+                return;
+            }
+
+            var designPoint = ToDesignPoint(e.Location);
+            if (TryHandlePressureUnitClick(designPoint))
+            {
+                return;
+            }
+            if (_canControl)
+            {
                 if (ResponseFilterRect.Contains(designPoint))
                 {
                     ShowResponseFilterMenu();
@@ -700,6 +792,40 @@ public sealed class SupplySchematicControl : UserControl
                     BranchClicked?.Invoke(branch.Value);
                 }
             }
+        }
+
+        private bool IsPressureUnitAt(Point designPoint)
+        {
+            if (GetPressureUnitRect(MainPressureBody).Contains(designPoint))
+            {
+                return true;
+            }
+            for (var index = 0; index < 4; index++)
+            {
+                if (GetPressureUnitRect(GetPressureBody(index)).Contains(designPoint))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private bool TryHandlePressureUnitClick(Point designPoint)
+        {
+            if (GetPressureUnitRect(MainPressureBody).Contains(designPoint))
+            {
+                ShowPressureUnitMenu(0);
+                return true;
+            }
+            for (var index = 0; index < 4; index++)
+            {
+                if (GetPressureUnitRect(GetPressureBody(index)).Contains(designPoint))
+                {
+                    ShowPressureUnitMenu(index + 1);
+                    return true;
+                }
+            }
+            return false;
         }
 
         private bool TryHandleSelfLockClick(Point designPoint)
@@ -875,9 +1001,10 @@ public sealed class SupplySchematicControl : UserControl
             DrawPressureReducer(graphics);
             DrawPressureSensor(
                 graphics,
-                new Rectangle(710, 94, 88, 112),
+                MainPressureBody,
                 "主气压",
-                _mainPressure);
+                GetMainPressureText(),
+                _mainPressureUnit);
             DrawConnector(graphics, 342, MainCenterY);
             DrawConnector(graphics, 360, MainCenterY);
             DrawConnector(graphics, 500, MainCenterY);
@@ -1171,7 +1298,8 @@ public sealed class SupplySchematicControl : UserControl
                 graphics,
                 GetPressureBody(index),
                 $"支路 {index + 1}",
-                _pressures[index]);
+                GetPressureText(index + 1),
+                _pressureUnits[index]);
             var pressureBody = GetPressureBody(index);
             DrawText(
                 graphics,
@@ -1453,7 +1581,12 @@ public sealed class SupplySchematicControl : UserControl
             return new Rectangle(body.X + 120, body.Bottom + 4, 24, 22);
         }
 
-        private void DrawPressureSensor(Graphics graphics, Rectangle body, string caption, string value)
+        private void DrawPressureSensor(
+            Graphics graphics,
+            Rectangle body,
+            string caption,
+            string value,
+            PressureDisplayUnit unit)
         {
             DrawRoundedCard(graphics, body, AppTheme.Card, 10);
             var gauge = new Rectangle(body.X + body.Width / 2 - 16, body.Y + 7, 32, 32);
@@ -1473,6 +1606,21 @@ public sealed class SupplySchematicControl : UserControl
                 new Rectangle(body.X + 4, body.Y + 58, body.Width - 8, 23),
                 _fontValue,
                 AppTheme.Text,
+                true);
+            var unitRect = GetPressureUnitRect(body);
+            DrawRoundedCard(
+                graphics,
+                unitRect,
+                AppTheme.SecondaryButton,
+                6,
+                AppTheme.Accent,
+                1f);
+            DrawText(
+                graphics,
+                $"{(unit == PressureDisplayUnit.Digital ? "数字量" : "电压")}  ▼",
+                unitRect,
+                _fontSmall,
+                AppTheme.Accent,
                 true);
         }
 
@@ -1751,6 +1899,51 @@ public sealed class SupplySchematicControl : UserControl
             _ => AppTheme.Text
         };
 
+        private void ShowPressureUnitMenu(int target)
+        {
+            _pressureUnitMenu?.Dispose();
+            _pressureUnitMenu = new ContextMenuStrip
+            {
+                BackColor = AppTheme.MenuBackground,
+                ForeColor = AppTheme.Text,
+                Font = new Font("Microsoft YaHei UI", 9F)
+            };
+            var currentUnit = target == 0
+                ? _mainPressureUnit
+                : _pressureUnits[target - 1];
+            AddUnitItem(PressureDisplayUnit.Digital, "数字量");
+            AddUnitItem(PressureDisplayUnit.Voltage, "电压 (V)");
+
+            var body = target == 0
+                ? MainPressureBody
+                : GetPressureBody(target - 1);
+            var anchor = ToClientRectangle(GetPressureUnitRect(body));
+            _pressureUnitMenu.Show(this, new Point(anchor.Left, anchor.Bottom));
+
+            void AddUnitItem(PressureDisplayUnit unit, string text)
+            {
+                var item = new ToolStripMenuItem(text)
+                {
+                    Checked = currentUnit == unit,
+                    BackColor = AppTheme.MenuBackground,
+                    ForeColor = AppTheme.Text
+                };
+                item.Click += (_, _) =>
+                {
+                    if (target == 0)
+                    {
+                        _mainPressureUnit = unit;
+                    }
+                    else
+                    {
+                        _pressureUnits[target - 1] = unit;
+                    }
+                    Invalidate();
+                };
+                _pressureUnitMenu.Items.Add(item);
+            }
+        }
+
         private void ShowResponseFilterMenu()
         {
             _responseFilterMenu?.Dispose();
@@ -1845,6 +2038,15 @@ public sealed class SupplySchematicControl : UserControl
             return new Rectangle(1210, BranchCenters[index] - 44, 90, 88);
         }
 
+        private static Rectangle GetPressureUnitRect(Rectangle body)
+        {
+            return new Rectangle(
+                body.X + (body.Width - 76) / 2,
+                body.Y - 25,
+                76,
+                20);
+        }
+
         private static Rectangle GetRestrictorBody(int index)
         {
             return new Rectangle(1648, BranchCenters[index] - 36, 102, 72);
@@ -1870,6 +2072,7 @@ public sealed class SupplySchematicControl : UserControl
                 _flowTimer.Dispose();
                 _valveAnimationTimer.Dispose();
                 _responseFilterMenu?.Dispose();
+                _pressureUnitMenu?.Dispose();
                 _fontSmall.Dispose();
                 _fontNormal.Dispose();
                 _fontBold.Dispose();
